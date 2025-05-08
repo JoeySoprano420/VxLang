@@ -519,3 +519,617 @@ strcmp:
 .equal:
     xor eax, eax
     ret
+
+section .data
+    identifier_buffer db 128 dup(0)   ; Buffer for storing function/scope names
+    token_buffer db 128 dup(0)        ; Temporary processing space
+    scoped_prefix db "chamber_core_", 0  ; Example prefix
+    label_counter dd 0                 ; Label version counter
+    bytes_written dq 0                 ; Track console writes
+    console_handle dq 0                 ; Simulated console handle
+    new_line db 10, 0                   ; New line character for readability
+
+section .text
+
+; Simulates writing output to console, used for debugging label creation
+write_line:
+    mov rcx, [console_handle]       ; Console handle
+    mov r8, strlen(rdx)             ; Determine message length
+    lea r9, [bytes_written]         ; Track bytes written
+    sub rsp, 32
+    call WriteConsoleA
+    add rsp, 32
+    ret
+
+; Function to construct a dynamic label from identifier + scope
+write_line_dynamic_label:
+    lea rsi, [identifier_buffer]  ; Function/variable name
+    lea rdi, [token_buffer]       ; Label output buffer
+    lea rbx, [scoped_prefix]      ; Scope prefix e.g., "chamber_core_"
+
+    xor rcx, rcx  ; Initialize index
+    xor rdx, rdx
+
+.copy_scope:
+    mov al, [rbx + rcx]
+    cmp al, 0
+    je .copy_name
+    mov [rdi + rcx], al
+    inc rcx
+    jmp .copy_scope
+
+.copy_name:
+    mov al, [rsi + rdx]
+    cmp al, 0
+    je .version_hash
+    mov [rdi + rcx], al
+    inc rcx
+    inc rdx
+    jmp .copy_name
+
+.version_hash:
+    ; Append unique suffix `_v{n}`
+    mov byte [rdi + rcx], '_'
+    mov byte [rdi + rcx + 1], 'v'
+    mov rax, [label_counter]
+    add rax, '0'             ; Convert integer counter to ASCII
+    mov [rdi + rcx + 2], al
+    inc rax
+    mov [label_counter], rax
+    mov byte [rdi + rcx + 3], ':'   ; Label termination
+    mov byte [rdi + rcx + 4], 0
+
+    lea rdx, [token_buffer]
+    call write_line                ; Output the generated label
+    ret
+
+; Basic string comparison utility
+strcmp:
+    xor eax, eax
+.loop:
+    mov al, [rdi]
+    mov bl, [rsi]
+    cmp al, bl
+    jne .diff
+    test al, al
+    je .equal
+    inc rdi
+    inc rsi
+    jmp .loop
+
+.diff:
+    mov eax, 1
+    ret
+
+.equal:
+    xor eax, eax
+    ret
+
+section .data
+    identifier_buffer db 128 dup(0)  ; Buffer for user-defined names
+    token_buffer db 256 dup(0)       ; Expanded buffer to handle longer labels
+    scoped_prefix db "chamber_", 0   ; Variable-length prefix
+    label_counter dd 0               ; Unique label counter
+    new_line db 10, 0                ; New line character
+    max_label_size dd 255            ; Define max allowed label size
+
+section .text
+
+; Simulated console output helper
+write_line:
+    mov rcx, [console_handle]       ; Console handle
+    mov r8, strlen(rdx)             ; Message length
+    lea r9, [bytes_written]         ; Track bytes written
+    sub rsp, 32
+    call WriteConsoleA
+    add rsp, 32
+    ret
+
+; Label generator with error handling
+write_line_dynamic_label:
+    lea rsi, [identifier_buffer]  ; Function name
+    lea rdi, [token_buffer]       ; Label output buffer
+    lea rbx, [scoped_prefix]      ; Scope prefix e.g., "chamber_"
+
+    xor rcx, rcx  ; Reset index
+    xor rdx, rdx
+
+.check_overflow:
+    mov eax, [max_label_size]    ; Max label length
+    cmp rcx, eax
+    ja .error_buffer_overflow
+
+.copy_scope:
+    mov al, [rbx + rcx]
+    cmp al, 0
+    je .copy_name
+    mov [rdi + rcx], al
+    inc rcx
+    jmp .check_overflow
+
+.copy_name:
+    mov al, [rsi + rdx]
+    cmp al, 0
+    je .version_hash
+    mov [rdi + rcx], al
+    inc rcx
+    inc rdx
+    jmp .check_overflow
+
+.version_hash:
+    ; Append unique suffix "_v{n}"
+    mov byte [rdi + rcx], '_'
+    mov byte [rdi + rcx + 1], 'v'
+    mov rax, [label_counter]
+    add rax, '0'  ; Convert integer to ASCII
+    mov [rdi + rcx + 2], al
+    inc rax
+    mov [label_counter], rax
+    mov byte [rdi + rcx + 3], ':'  ; Label termination
+    mov byte [rdi + rcx + 4], 0
+
+    lea rdx, [token_buffer]
+    call write_line                ; Output the generated label
+    ret
+
+.error_buffer_overflow:
+    mov rdx, buffer_overflow_msg
+    call write_line
+    ret
+
+section .data
+buffer_overflow_msg db "ERROR: Label buffer overflow detected.", 0
+
+section .data
+    identifier_buffer db 128 dup(0)  ; Buffer for user-defined names
+    token_buffer db 256 dup(0)       ; Expanded buffer for labels
+    scoped_prefix db "chamber_", 0   ; Variable-length prefix
+    label_counter dd 0               ; Unique label counter
+    max_label_size dd 255            ; Define max allowed label size
+    hash_table db 256 dup(0)         ; Hash table for duplicate detection
+    error_msg db "ERROR: Label buffer overflow.", 0
+    duplicate_msg db "ERROR: Duplicate label detected.", 0
+    debug_output db "DEBUG: Generated label: ", 0
+    new_line db 10, 0                ; New line character
+
+section .text
+
+; Simulated console output helper
+write_line:
+    mov rcx, [console_handle]
+    mov r8, strlen(rdx)
+    lea r9, [bytes_written]
+    sub rsp, 32
+    call WriteConsoleA
+    add rsp, 32
+    ret
+
+; Hashing function for duplicate detection
+hash_label:
+    xor eax, eax
+    xor ecx, ecx
+.hash_loop:
+    mov al, [rdi + ecx]
+    test al, al
+    je .store_hash
+    add eax, ecx  ; Simple additive hash function
+    inc ecx
+    jmp .hash_loop
+.store_hash:
+    mov [hash_table + eax], 1
+    ret
+
+; Check for existing label in hash table
+check_duplicate_label:
+    xor eax, eax
+    xor ecx, ecx
+.check_loop:
+    mov al, [rdi + ecx]
+    test al, al
+    je .verify_hash
+    add eax, ecx
+    inc ecx
+    jmp .check_loop
+.verify_hash:
+    cmp byte [hash_table + eax], 1
+    je .error_duplicate
+    ret
+.error_duplicate:
+    mov rdx, duplicate_msg
+    call write_line
+    ret
+
+; Label generator with error handling and namespace validation
+write_line_dynamic_label:
+    lea rsi, [identifier_buffer]  ; Function name
+    lea rdi, [token_buffer]       ; Label output buffer
+    lea rbx, [scoped_prefix]      ; Scope prefix
+
+    xor rcx, rcx
+    xor rdx, rdx
+
+.check_overflow:
+    cmp rcx, [max_label_size]
+    ja .error_buffer_overflow
+
+.copy_scope:
+    mov al, [rbx + rcx]
+    cmp al, 0
+    je .copy_name
+    mov [rdi + rcx], al
+    inc rcx
+    jmp .check_overflow
+
+.copy_name:
+    mov al, [rsi + rdx]
+    cmp al, 0
+    je .version_hash
+    mov [rdi + rcx], al
+    inc rcx
+    inc rdx
+    jmp .check_overflow
+
+.version_hash:
+    mov byte [rdi + rcx], '_'
+    mov byte [rdi + rcx + 1], 'v'
+    mov rax, [label_counter]
+    add rax, '0'
+    mov [rdi + rcx + 2], al
+    inc rax
+    mov [label_counter], rax
+    mov byte [rdi + rcx + 3], ':'
+    mov byte [rdi + rcx + 4], 0
+
+.validate_namespace:
+    call check_duplicate_label
+    call hash_label
+
+.debug_output:
+    mov rdx, debug_output
+    call write_line
+    lea rdx, [token_buffer]
+    call write_line
+
+    ret
+
+.error_buffer_overflow:
+    mov rdx, error_msg
+    call write_line
+    ret
+
+section .data
+    identifier_buffer db 128 dup(0)  ; Buffer for user-defined names
+    token_buffer db 256 dup(0)       ; Expanded buffer for labels
+    scoped_prefix db "chamber_", 0   ; Variable-length prefix
+    label_counter dd 0               ; Unique label counter
+    max_label_size dd 255            ; Define max allowed label size
+    hash_table db 256 dup(0)         ; Hash table for duplicate detection
+    error_msg db "ERROR: Label buffer overflow.", 0
+    duplicate_msg db "ERROR: Duplicate label detected.", 0
+    debug_output db "DEBUG: Generated label: ", 0
+    random_seed dq 123456789          ; Random seed for hash suffixing
+    new_line db 10, 0                 ; New line character
+
+section .text
+
+; Simulated console output helper
+write_line:
+    mov rcx, [console_handle]
+    mov r8, strlen(rdx)
+    lea r9, [bytes_written]
+    sub rsp, 32
+    call WriteConsoleA
+    add rsp, 32
+    ret
+
+; Hashing function for duplicate detection
+hash_label:
+    xor eax, eax
+    xor ecx, ecx
+.hash_loop:
+    mov al, [rdi + ecx]
+    test al, al
+    je .store_hash
+    add eax, ecx  ; Simple additive hash function
+    inc ecx
+    jmp .hash_loop
+.store_hash:
+    mov [hash_table + eax], 1
+    ret
+
+; Check for existing label in hash table
+check_duplicate_label:
+    xor eax, eax
+    xor ecx, ecx
+.check_loop:
+    mov al, [rdi + ecx]
+    test al, al
+    je .verify_hash
+    add eax, ecx
+    inc ecx
+    jmp .check_loop
+.verify_hash:
+    cmp byte [hash_table + eax], 1
+    je .apply_random_suffix
+    ret
+
+.apply_random_suffix:
+    mov rax, [random_seed]      ; Random seed
+    imul rax, rax, 37           ; Random hash formula
+    xor rax, 0xCAFEBABE         ; Mix with a fixed mask
+    mov byte [rdi + rcx], '_'
+    mov byte [rdi + rcx + 1], 'h'
+    mov byte [rdi + rcx + 2], 'x'
+    mov byte [rdi + rcx + 3], '0' + (rax mod 10)   ; Append randomized digit
+    mov byte [rdi + rcx + 4], ':' 
+    mov byte [rdi + rcx + 5], 0
+    inc rax
+    mov [random_seed], rax      ; Update seed to avoid repeats
+
+.validate_namespace:
+    call check_duplicate_label
+    call hash_label
+
+.debug_output:
+    mov rdx, debug_output
+    call write_line
+    lea rdx, [token_buffer]
+    call write_line
+
+    ret
+
+; Label generator with error handling and namespace validation
+write_line_dynamic_label:
+    lea rsi, [identifier_buffer]
+    lea rdi, [token_buffer]
+    lea rbx, [scoped_prefix]
+
+    xor rcx, rcx
+    xor rdx, rdx
+
+.check_overflow:
+    cmp rcx, [max_label_size]
+    ja .error_buffer_overflow
+
+.copy_scope:
+    mov al, [rbx + rcx]
+    cmp al, 0
+    je .copy_name
+    mov [rdi + rcx], al
+    inc rcx
+    jmp .check_overflow
+
+.copy_name:
+    mov al, [rsi + rdx]
+    cmp al, 0
+    je .version_hash
+    mov [rdi + rcx], al
+    inc rcx
+    inc rdx
+    jmp .check_overflow
+
+.version_hash:
+    mov byte [rdi + rcx], '_'
+    mov byte [rdi + rcx + 1], 'v'
+    mov rax, [label_counter]
+    add rax, '0'
+    mov [rdi + rcx + 2], al
+    inc rax
+    mov [label_counter], rax
+    mov byte [rdi + rcx + 3], ':'
+    mov byte [rdi + rcx + 4], 0
+
+.validate_namespace:
+    call check_duplicate_label
+    call hash_label
+
+.debug_output:
+    mov rdx, debug_output
+    call write_line
+    lea rdx, [token_buffer]
+    call write_line
+
+    ret
+
+.error_buffer_overflow:
+    mov rdx, error_msg
+    call write_line
+    ret
+
+section .data
+    identifier_buffer db 128 dup(0)  ; Buffer for user-defined names
+    token_buffer db 256 dup(0)       ; Expanded buffer for labels
+    scoped_prefix db "chamber_", 0   ; Variable-length prefix
+    label_counter dd 0               ; Unique label counter
+    max_label_size dd 255            ; Max allowed label size
+    hash_table db 256 dup(0)         ; Hash table for duplicate detection
+    collision_cache db 256 dup(0)    ; Cache for resolved label conflicts
+    error_msg db "ERROR: Label buffer overflow.", 0
+    duplicate_msg db "ERROR: Duplicate label detected.", 0
+    debug_output db "DEBUG: Generated label: ", 0
+    random_seed dq 123456789          ; Random seed for hash suffixing
+    mutex_lock db 0                   ; Mutex for thread synchronization
+    new_line db 10, 0                 ; New line character
+
+section .text
+
+; Simulated console output helper
+write_line:
+    mov rcx, [console_handle]
+    mov r8, strlen(rdx)
+    lea r9, [bytes_written]
+    sub rsp, 32
+    call WriteConsoleA
+    add rsp, 32
+    ret
+
+; Mutex lock for thread-safe execution
+lock_mutex:
+    mov al, [mutex_lock]
+    test al, al
+    jnz .wait
+    mov byte [mutex_lock], 1
+    ret
+.wait:
+    pause
+    jmp lock_mutex
+
+unlock_mutex:
+    mov byte [mutex_lock], 0
+    ret
+
+; Hashing function for duplicate detection
+hash_label:
+    xor eax, eax
+    xor ecx, ecx
+.hash_loop:
+    mov al, [rdi + ecx]
+    test al, al
+    je .store_hash
+    add eax, ecx  ; Simple additive hash function
+    inc ecx
+    jmp .hash_loop
+.store_hash:
+    mov [hash_table + eax], 1
+    ret
+
+; Check for existing label in hash table
+check_duplicate_label:
+    xor eax, eax
+    xor ecx, ecx
+.check_loop:
+    mov al, [rdi + ecx]
+    test al, al
+    je .verify_hash
+    add eax, ecx
+    inc ecx
+    jmp .check_loop
+.verify_hash:
+    cmp byte [hash_table + eax], 1
+    je .apply_random_suffix
+    ret
+
+; Collision resolution using randomized hash suffixing with caching
+.apply_random_suffix:
+    mov rax, [random_seed]
+    imul rax, rax, 37
+    xor rax, 0xCAFEBABE
+    mov byte [rdi + rcx], '_'
+    mov byte [rdi + rcx + 1], 'h'
+    mov byte [rdi + rcx + 2], 'x'
+    mov byte [rdi + rcx + 3], '0' + (rax mod 10)
+    mov byte [rdi + rcx + 4], ':'
+    mov byte [rdi + rcx + 5], 0
+    mov [collision_cache + eax], 1  ; Store resolved conflict
+    inc rax
+    mov [random_seed], rax
+
+.validate_namespace:
+    call check_duplicate_label
+    call hash_label
+
+.debug_output:
+    mov rdx, debug_output
+    call write_line
+    lea rdx, [token_buffer]
+    call write_line
+
+    ret
+
+; Thread-safe label generator
+write_line_dynamic_label:
+    call lock_mutex
+
+    lea rsi, [identifier_buffer]
+    lea rdi, [token_buffer]
+    lea rbx, [scoped_prefix]
+
+    xor rcx, rcx
+    xor rdx, rdx
+
+.check_overflow:
+    cmp rcx, [max_label_size]
+    ja .error_buffer_overflow
+
+.copy_scope:
+    mov al, [rbx + rcx]
+    cmp al, 0
+    je .copy_name
+    mov [rdi + rcx], al
+    inc rcx
+    jmp .check_overflow
+
+.copy_name:
+    mov al, [rsi + rdx]
+    cmp al, 0
+    je .version_hash
+    mov [rdi + rcx], al
+    inc rcx
+    inc rdx
+    jmp .check_overflow
+
+.version_hash:
+    mov byte [rdi + rcx], '_'
+    mov byte [rdi + rcx + 1], 'v'
+    mov rax, [label_counter]
+    add rax, '0'
+    mov [rdi + rcx + 2], al
+    inc rax
+    mov [label_counter], rax
+    mov byte [rdi + rcx + 3], ':'
+    mov byte [rdi + rcx + 4], 0
+
+.validate_namespace:
+    call check_duplicate_label
+    call hash_label
+
+.debug_output:
+    mov rdx, debug_output
+    call write_line
+    lea rdx, [token_buffer]
+    call write_line
+
+    call unlock_mutex
+    ret
+
+.error_buffer_overflow:
+    mov rdx, error_msg
+    call write_line
+    call unlock_mutex
+    ret
+
+section .text
+
+copy_scope_simd:
+    movdqu xmm0, [rbx]   ; Load 16 bytes from scoped prefix
+    movdqu [rdi], xmm0   ; Store 16 bytes into token buffer
+    add rdi, 16
+    add rbx, 16
+    ret
+
+copy_name_simd:
+    movdqu xmm1, [rsi]   ; Load 16 bytes from function identifier
+    movdqu [rdi], xmm1   ; Store 16 bytes into token buffer
+    add rdi, 16
+    add rsi, 16
+    ret
+
+section .data
+    start_cycle dq 0
+    end_cycle dq 0
+    perf_msg db "Elapsed CPU Cycles: ", 0
+
+section .text
+
+benchmark_label_gen:
+    rdtsc                      ; Read starting timestamp
+    mov [start_cycle], rdx
+    call write_line_dynamic_label
+    rdtsc                      ; Read ending timestamp
+    mov [end_cycle], rdx
+    sub rdx, [start_cycle]      ; Compute elapsed cycles
+
+    mov rdx, perf_msg
+    call write_line
+    ret
+
