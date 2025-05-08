@@ -1,0 +1,8 @@
+pulse transmitter(channel, packet) {
+    try {
+        send packet to channel
+    } catch (error) {
+        raise alert "Transmission Fault"
+        fallback recover(channel)
+    }
+}
