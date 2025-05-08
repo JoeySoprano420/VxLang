@@ -1,0 +1,10 @@
+chamber optics.render {
+    shader pulse vertex_shift(vec3 pos) {
+        vec3 transformed = pos * mat_view;
+        return transformed;
+    }
+    
+    trigger on_signal(frameReady) {
+        pulse render_frame()
+    }
+}
