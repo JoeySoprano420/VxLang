@@ -37,3 +37,23 @@ begin
     end if;
   end process;
 end Behavioral;
+
+      library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity LabelCacheFPGA is
+  Port ( clk : in STD_LOGIC;
+         label_in : in STD_LOGIC_VECTOR(127 downto 0);
+         label_out : out STD_LOGIC_VECTOR(127 downto 0));
+end LabelCacheFPGA;
+
+architecture Behavioral of LabelCacheFPGA is
+begin
+  process(clk)
+  begin
+    if rising_edge(clk) then
+      label_out <= label_in xor x"DEADBEEF";  -- FPGA-optimized memory tuning
+    end if;
+  end process;
+end Behavioral;
