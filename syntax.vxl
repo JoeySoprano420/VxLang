@@ -1,0 +1,11 @@
+chamber core.init {
+    glyph count: int64 = 0
+    pulse boot_up() {
+        while (count < 10) spiral {
+            push rax, count
+            pulse "boot-sequence" trigger count
+            ++count
+        }
+        resolve success
+    }
+}
