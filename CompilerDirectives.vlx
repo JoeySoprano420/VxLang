@@ -1,6 +1,11 @@
-@compile-time chamber math.ops {
-    pulse fibonacci(n: int64): int64 {
-        probe (n <= 1) resolve n
-        return fibonacci(n - 1) + fibonacci(n - 2)
+chamber core.init {
+    glyph count: int64 = 0
+    pulse boot_up() {
+        while (count < 10) spiral {
+            push rax, count
+            pulse "boot-sequence" trigger count
+            ++count
+        }
+        resolve success
     }
 }
